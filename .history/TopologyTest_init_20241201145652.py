@@ -3,7 +3,6 @@ from tkinter import ttk, filedialog
 import json
 from TopologyTest import TopologyTest
 from pathlib import Path
-import os
 
 class TopologyTestGUI:
     def __init__(self, root):
@@ -37,13 +36,7 @@ class TopologyTestGUI:
     def load_config(self):
         """Load the configuration file."""
         try:
-            # Get the directory where the script is located
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            config_path = os.path.join(script_dir, 'config.json')
-            
-            print(f"Looking for config file at: {config_path}")  # Debug print
-            
-            with open(config_path, 'r') as f:
+            with open('config.json', 'r') as f:
                 config = json.load(f)
                 print("Loaded config file:")
                 print("Dataset rules:", config.get('dataset_rules', {}).keys())
@@ -186,7 +179,6 @@ class TopologyTestGUI:
         with open('config.json', 'w') as f:
             json.dump(self.config_file, f, indent=4)
 
-
     def show_results(self, summary, output_files):
         results_window = tk.Toplevel(self.root)
         results_window.title("Topology Test Results")
@@ -203,12 +195,8 @@ class TopologyTestGUI:
         
         # Insert results
         text_widget.insert(tk.END, summary + "\n\nOutput files:\n")
-        if output_files:
-            for check_type, file_path in output_files.items():
-                if file_path:  # Only show successful saves
-                    text_widget.insert(tk.END, f"{check_type}: {file_path}\n")
-        else:
-            text_widget.insert(tk.END, "No output files were generated.\n")
+        for check_type, file_path in output_files.items():
+            text_widget.insert(tk.END, f"{check_type}: {file_path}\n")
         
         text_widget.configure(state='disabled')  # Make read-only
 

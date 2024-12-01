@@ -186,6 +186,81 @@ class TopologyTestGUI:
         with open('config.json', 'w') as f:
             json.dump(self.config_file, f, indent=4)
 
+    def _save_issues_to_geojson(self, check_type, issues):
+        """
+        Save topology issues to a GeoJSON file.
+        :param check_type: Type of topology check (e.g., 'intersections', 'gaps')
+        :param issues: List of geometry issues found
+        :return: Path to the saved file
+        """
+        # Create output directory if it doesn't exist
+        output_dir = os.path.join(os.path.dirname(self.geojson_file), 
+                                self.config.get('output_folder_name', 'TopologyTest_Output'))
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Prepare filename
+        base_name = os.path.splitext(os.path.basename(self.geojson_file))[0]
+        output_file = os.path.join(output_dir, f"{base_name}_{check_type}.geojson")
+
+        # Prepare features list based on check type
+        features = []
+        if check_type == 'intersections':
+            for geom1, geom2, inter_geom, attr1, attr2 in issues:
+                properties = {
+                    'feature1_attributes': attr1,
+                    'feature2_attributes': attr2
+                }
+                features.append({
+                    'type': 'Feature',
+                    'geometry': mapping(inter_geom),
+                    'properties': properties
+                })
+        elif check_type in ['self_intersections', 'dangles']:
+            for geom, attrs in issues:
+                features.append({
+                    'type': 'Feature',
+                    'geometry': mapping(geom),
+                    'properties': attrs
+                })
+        elif check_type == 'gaps':
+            # For gaps, we just have geometries without attributes
+            if not issues.is_empty:
+                if isinstance(issues, (MultiPolygon, MultiLineString)):
+                    for geom in issues.geoms:
+                        features.append({
+                            'type': 'Feature',
+                            'geometry': mapping(geom),
+                            'properties': {'type': 'gap'}
+                        })
+                else:
+                    features.append({
+                        'type': 'Feature',
+                        'geometry': mapping(issues),
+                        'properties': {'type': 'gap'}
+                    })
+        elif check_type in ['overlaps', 'containment']:
+            for geom1, geom2, attr1, attr2 in issues:
+                properties = {
+                    'feature1_attributes': attr1,
+                    'feature2_attributes': attr2
+                }
+                # For overlaps/containment, save the first geometry
+                features.append({
+                    'type': 'Feature',
+                    'geometry': mapping(geom1),
+                    'properties': properties
+                })
+
+        # Create and save the GeoJSON
+        feature_collection = {
+            'type': 'FeatureCollection',
+            'features': features
+        }
+
+        with open(output_file, 'w') as f:
+            json.dump(feature_collection, f)
+
+        return output_file
 
     def show_results(self, summary, output_files):
         results_window = tk.Toplevel(self.root)
@@ -203,12 +278,8 @@ class TopologyTestGUI:
         
         # Insert results
         text_widget.insert(tk.END, summary + "\n\nOutput files:\n")
-        if output_files:
-            for check_type, file_path in output_files.items():
-                if file_path:  # Only show successful saves
-                    text_widget.insert(tk.END, f"{check_type}: {file_path}\n")
-        else:
-            text_widget.insert(tk.END, "No output files were generated.\n")
+        for check_type, file_path in output_files.items():
+            text_widget.insert(tk.END, f"{check_type}: {file_path}\n")
         
         text_widget.configure(state='disabled')  # Make read-only
 

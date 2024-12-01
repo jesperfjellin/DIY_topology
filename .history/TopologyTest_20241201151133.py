@@ -2,7 +2,6 @@ import geojson
 import os
 import json
 from shapely.geometry import mapping, MultiPolygon, MultiLineString, Polygon, Point
-from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 from itertools import combinations
 import geopandas as gpd
@@ -405,15 +404,12 @@ class TopologyTest:
             
             if check_type == 'intersections':
                 for geom1, geom2, inter_geom, attr1, attr2 in issues:
-                    # Remove geometry from attributes if present
-                    attr1 = {k: v for k, v in attr1.items() if k != 'geometry'}
-                    attr2 = {k: v for k, v in attr2.items() if k != 'geometry'}
-                    
+                    print(f"Processing intersection: {type(inter_geom)}")
                     properties = {
                         'feature1_attributes': self._convert_to_json_serializable(attr1),
                         'feature2_attributes': self._convert_to_json_serializable(attr2),
-                        'feature1_geometry': geom1,
-                        'feature2_geometry': geom2
+                        'feature1_geometry': geom1,  # Should already be GeoJSON
+                        'feature2_geometry': geom2   # Should already be GeoJSON
                     }
                     features.append({
                         'type': 'Feature',
@@ -422,18 +418,15 @@ class TopologyTest:
                     })
             elif check_type in ['overlaps', 'containment']:
                 for geom1, geom2, attr1, attr2 in issues:
-                    # Remove geometry from attributes if present
-                    attr1 = {k: v for k, v in attr1.items() if k != 'geometry'}
-                    attr2 = {k: v for k, v in attr2.items() if k != 'geometry'}
-                    
+                    print(f"Processing overlap: {type(geom1)}")
                     properties = {
                         'feature1_attributes': self._convert_to_json_serializable(attr1),
                         'feature2_attributes': self._convert_to_json_serializable(attr2),
-                        'feature2_geometry': geom2
+                        'feature2_geometry': geom2  # Should already be GeoJSON
                     }
                     features.append({
                         'type': 'Feature',
-                        'geometry': geom1,
+                        'geometry': geom1,  # Should already be GeoJSON
                         'properties': properties
                     })
 

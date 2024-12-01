@@ -2,7 +2,6 @@ import geojson
 import os
 import json
 from shapely.geometry import mapping, MultiPolygon, MultiLineString, Polygon, Point
-from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 from itertools import combinations
 import geopandas as gpd
@@ -387,70 +386,64 @@ class TopologyTest:
             return obj
     
     def _save_issues_to_geojson(self, check_type, issues):
-        try:
-            print(f"\nSaving {check_type} issues:")
-            print(f"Number of issues: {len(issues)}")
-            
-            # Create output directory if it doesn't exist
-            output_dir = os.path.join(os.path.dirname(self.geojson_file), 
-                                    self.config.get('output_folder_name', 'TopologyTest_Output'))
-            os.makedirs(output_dir, exist_ok=True)
+    try:
+        print(f"\nSaving {check_type} issues:")
+        print(f"Number of issues: {len(issues)}")
+        
+        # Create output directory if it doesn't exist
+        output_dir = os.path.join(os.path.dirname(self.geojson_file), 
+                                self.config.get('output_folder_name', 'TopologyTest_Output'))
+        os.makedirs(output_dir, exist_ok=True)
 
-            # Prepare filename
-            base_name = os.path.splitext(os.path.basename(self.geojson_file))[0]
-            output_file = os.path.join(output_dir, f"{base_name}_{check_type}.geojson")
+        # Prepare filename
+        base_name = os.path.splitext(os.path.basename(self.geojson_file))[0]
+        output_file = os.path.join(output_dir, f"{base_name}_{check_type}.geojson")
 
-            # Prepare features list based on check type
-            features = []
-            
-            if check_type == 'intersections':
-                for geom1, geom2, inter_geom, attr1, attr2 in issues:
-                    # Remove geometry from attributes if present
-                    attr1 = {k: v for k, v in attr1.items() if k != 'geometry'}
-                    attr2 = {k: v for k, v in attr2.items() if k != 'geometry'}
-                    
-                    properties = {
-                        'feature1_attributes': self._convert_to_json_serializable(attr1),
-                        'feature2_attributes': self._convert_to_json_serializable(attr2),
-                        'feature1_geometry': geom1,
-                        'feature2_geometry': geom2
-                    }
-                    features.append({
-                        'type': 'Feature',
-                        'geometry': inter_geom,
-                        'properties': properties
-                    })
-            elif check_type in ['overlaps', 'containment']:
-                for geom1, geom2, attr1, attr2 in issues:
-                    # Remove geometry from attributes if present
-                    attr1 = {k: v for k, v in attr1.items() if k != 'geometry'}
-                    attr2 = {k: v for k, v in attr2.items() if k != 'geometry'}
-                    
-                    properties = {
-                        'feature1_attributes': self._convert_to_json_serializable(attr1),
-                        'feature2_attributes': self._convert_to_json_serializable(attr2),
-                        'feature2_geometry': geom2
-                    }
-                    features.append({
-                        'type': 'Feature',
-                        'geometry': geom1,
-                        'properties': properties
-                    })
+        # Prepare features list based on check type
+        features = []
+        
+        if check_type == 'intersections':
+            for geom1, geom2, inter_geom, attr1, attr2 in issues:
+                print(f"Processing intersection: {type(inter_geom)}")
+                properties = {
+                    'feature1_attributes': self._convert_to_json_serializable(attr1),
+                    'feature2_attributes': self._convert_to_json_serializable(attr2),
+                    'feature1_geometry': geom1,  # Should already be GeoJSON
+                    'feature2_geometry': geom2   # Should already be GeoJSON
+                }
+                features.append({
+                    'type': 'Feature',
+                    'geometry': inter_geom,
+                    'properties': properties
+                })
+        elif check_type in ['overlaps', 'containment']:
+            for geom1, geom2, attr1, attr2 in issues:
+                print(f"Processing overlap: {type(geom1)}")
+                properties = {
+                    'feature1_attributes': self._convert_to_json_serializable(attr1),
+                    'feature2_attributes': self._convert_to_json_serializable(attr2),
+                    'feature2_geometry': geom2  # Should already be GeoJSON
+                }
+                features.append({
+                    'type': 'Feature',
+                    'geometry': geom1,  # Should already be GeoJSON
+                    'properties': properties
+                })
 
-            # Convert the entire feature collection to ensure everything is JSON serializable
-            feature_collection = {
-                'type': 'FeatureCollection',
-                'features': self._convert_to_json_serializable(features)
-            }
+        # Convert the entire feature collection to ensure everything is JSON serializable
+        feature_collection = {
+            'type': 'FeatureCollection',
+            'features': self._convert_to_json_serializable(features)
+        }
 
-            print(f"Saving to: {output_file}")
-            
-            with open(output_file, 'w') as f:
-                json.dump(feature_collection, f, indent=2)
+        print(f"Saving to: {output_file}")
+        
+        with open(output_file, 'w') as f:
+            json.dump(feature_collection, f, indent=2)
 
-            return output_file
-        except Exception as e:
-            print(f"Error in _save_issues_to_geojson for {check_type}: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return None
+        return output_file
+    except Exception as e:
+        print(f"Error in _save_issues_to_geojson for {check_type}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None

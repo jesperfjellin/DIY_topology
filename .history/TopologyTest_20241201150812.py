@@ -2,7 +2,6 @@ import geojson
 import os
 import json
 from shapely.geometry import mapping, MultiPolygon, MultiLineString, Polygon, Point
-from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 from itertools import combinations
 import geopandas as gpd
@@ -152,18 +151,11 @@ class TopologyTest:
                             if not inter_geom.is_valid:
                                 continue
                             if inter_geom.area >= self.config.get("min_intersection_area", 0):
-                                # Debug print
-                                print(f"Found intersection: {type(row['geometry'])}")
-                                
-                                # Convert all geometries to GeoJSON format
-                                geom1_json = mapping(row['geometry'])
-                                geom2_json = mapping(match['geometry'])
-                                inter_geom_json = mapping(inter_geom)
-                                
+                                # Convert geometries to GeoJSON format here
                                 invalid_intersections.append((
-                                    geom1_json,
-                                    geom2_json,
-                                    inter_geom_json,
+                                    mapping(row['geometry']),
+                                    mapping(match['geometry']),
+                                    mapping(inter_geom),
                                     row['attributes'],
                                     match['attributes']
                                 ))
@@ -292,32 +284,26 @@ class TopologyTest:
         return dangles
     
     def check_overlaps(self, tolerance=0.0):
-        """
-        Check for overlapping geometries beyond simple intersection points.
-        :param tolerance: Minimum overlap area to consider
-        """
-        overlaps = []
-        gdf = gpd.GeoDataFrame(self.geometries, columns=['geometry', 'attributes'])
-        
-        for idx1, row1 in gdf.iterrows():
-            for idx2, row2 in gdf.iloc[idx1+1:].iterrows():
-                if row1['geometry'].overlaps(row2['geometry']):
-                    overlap_area = row1['geometry'].intersection(row2['geometry']).area
-                    if overlap_area > tolerance:
-                        # Debug print
-                        print(f"Found overlap: {type(row1['geometry'])}")
-                        
-                        # Convert geometries to GeoJSON format
-                        geom1_json = mapping(row1['geometry'])
-                        geom2_json = mapping(row2['geometry'])
-                        
-                        overlaps.append((
-                            geom1_json,
-                            geom2_json,
-                            row1['attributes'],
-                            row2['attributes']
-                        ))
-        return overlaps
+    """
+    Check for overlapping geometries beyond simple intersection points.
+    :param tolerance: Minimum overlap area to consider
+    """
+    overlaps = []
+    gdf = gpd.GeoDataFrame(self.geometries, columns=['geometry', 'attributes'])
+    
+    for idx1, row1 in gdf.iterrows():
+        for idx2, row2 in gdf.iloc[idx1+1:].iterrows():
+            if row1['geometry'].overlaps(row2['geometry']):
+                overlap_area = row1['geometry'].intersection(row2['geometry']).area
+                if overlap_area > tolerance:
+                    # Convert geometries to GeoJSON format here
+                    overlaps.append((
+                        mapping(row1['geometry']),
+                        mapping(row2['geometry']),
+                        row1['attributes'],
+                        row2['attributes']
+                    ))
+    return overlaps
     
     def check_containment(self):
         """Check for geometries completely contained within others."""
@@ -373,84 +359,82 @@ class TopologyTest:
         
         return report
     
-    def _convert_to_json_serializable(self, obj):
-        """Recursively convert Shapely geometries to GeoJSON format."""
-        from shapely.geometry.base import BaseGeometry
-        
-        if isinstance(obj, dict):
-            return {key: self._convert_to_json_serializable(value) for key, value in obj.items()}
-        elif isinstance(obj, list):
-            return [self._convert_to_json_serializable(item) for item in obj]
-        elif isinstance(obj, BaseGeometry):
-            return mapping(obj)
-        else:
-            return obj
-    
     def _save_issues_to_geojson(self, check_type, issues):
+        """
+        Save topology issues to a GeoJSON file.
+        :param check_type: Type of topology check (e.g., 'intersections', 'gaps')
+        :param issues: List of geometry issues found
+        :return: Path to the saved file
+        """
+        # Create output directory if it doesn't exist
+        output_dir = os.path.join(os.path.dirname(self.geojson_file), 
+                                self.config.get('output_folder_name', 'TopologyTest_Output'))
+        os.makedirs(output_dir, exist_ok=True)
+
+        # Prepare filename
+        base_name = os.path.splitext(os.path.basename(self.geojson_file))[0]
+        output_file = os.path.join(output_dir, f"{base_name}_{check_type}.geojson")
+
+        # Prepare features list based on check type
+        features = []
         try:
-            print(f"\nSaving {check_type} issues:")
-            print(f"Number of issues: {len(issues)}")
-            
-            # Create output directory if it doesn't exist
-            output_dir = os.path.join(os.path.dirname(self.geojson_file), 
-                                    self.config.get('output_folder_name', 'TopologyTest_Output'))
-            os.makedirs(output_dir, exist_ok=True)
-
-            # Prepare filename
-            base_name = os.path.splitext(os.path.basename(self.geojson_file))[0]
-            output_file = os.path.join(output_dir, f"{base_name}_{check_type}.geojson")
-
-            # Prepare features list based on check type
-            features = []
-            
             if check_type == 'intersections':
                 for geom1, geom2, inter_geom, attr1, attr2 in issues:
-                    # Remove geometry from attributes if present
-                    attr1 = {k: v for k, v in attr1.items() if k != 'geometry'}
-                    attr2 = {k: v for k, v in attr2.items() if k != 'geometry'}
-                    
                     properties = {
-                        'feature1_attributes': self._convert_to_json_serializable(attr1),
-                        'feature2_attributes': self._convert_to_json_serializable(attr2),
-                        'feature1_geometry': geom1,
-                        'feature2_geometry': geom2
+                        'feature1_attributes': attr1,
+                        'feature2_attributes': attr2
                     }
                     features.append({
                         'type': 'Feature',
-                        'geometry': inter_geom,
+                        'geometry': mapping(inter_geom),  # Convert Shapely geometry to GeoJSON
                         'properties': properties
                     })
+            elif check_type in ['self_intersections', 'dangles']:
+                for geom, attrs in issues:
+                    features.append({
+                        'type': 'Feature',
+                        'geometry': mapping(geom),  # Convert Shapely geometry to GeoJSON
+                        'properties': attrs
+                    })
+            elif check_type == 'gaps':
+                # For gaps, we just have geometries without attributes
+                if not issues.is_empty:
+                    if isinstance(issues, (MultiPolygon, MultiLineString)):
+                        for geom in issues.geoms:
+                            features.append({
+                                'type': 'Feature',
+                                'geometry': mapping(geom),  # Convert Shapely geometry to GeoJSON
+                                'properties': {'type': 'gap'}
+                            })
+                    else:
+                        features.append({
+                            'type': 'Feature',
+                            'geometry': mapping(issues),  # Convert Shapely geometry to GeoJSON
+                            'properties': {'type': 'gap'}
+                        })
             elif check_type in ['overlaps', 'containment']:
                 for geom1, geom2, attr1, attr2 in issues:
-                    # Remove geometry from attributes if present
-                    attr1 = {k: v for k, v in attr1.items() if k != 'geometry'}
-                    attr2 = {k: v for k, v in attr2.items() if k != 'geometry'}
-                    
                     properties = {
-                        'feature1_attributes': self._convert_to_json_serializable(attr1),
-                        'feature2_attributes': self._convert_to_json_serializable(attr2),
-                        'feature2_geometry': geom2
+                        'feature1_attributes': attr1,
+                        'feature2_attributes': attr2,
+                        'feature2_geometry': mapping(geom2)  # Include second geometry in properties
                     }
                     features.append({
                         'type': 'Feature',
-                        'geometry': geom1,
+                        'geometry': mapping(geom1),  # Convert Shapely geometry to GeoJSON
                         'properties': properties
                     })
 
-            # Convert the entire feature collection to ensure everything is JSON serializable
+            # Create and save the GeoJSON
             feature_collection = {
                 'type': 'FeatureCollection',
-                'features': self._convert_to_json_serializable(features)
+                'features': features
             }
 
-            print(f"Saving to: {output_file}")
-            
             with open(output_file, 'w') as f:
                 json.dump(feature_collection, f, indent=2)
 
             return output_file
         except Exception as e:
             print(f"Error in _save_issues_to_geojson for {check_type}: {str(e)}")
-            import traceback
-            traceback.print_exc()
             return None

@@ -188,29 +188,29 @@ class TopologyTestGUI:
 
 
     def show_results(self, summary, output_files):
-        results_window = tk.Toplevel(self.root)
-        results_window.title("Topology Test Results")
-        
-        # Create text widget for results
-        text_widget = tk.Text(results_window, wrap=tk.WORD, width=60, height=20)
-        text_widget.grid(row=0, column=0, padx=10, pady=10)
-        
-        # Add scrollbar
-        scrollbar = ttk.Scrollbar(results_window, orient=tk.VERTICAL, 
-                                command=text_widget.yview)
-        scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
-        text_widget['yscrollcommand'] = scrollbar.set
-        
-        # Insert results
-        text_widget.insert(tk.END, summary + "\n\nOutput files:\n")
-        if output_files:
-            for check_type, file_path in output_files.items():
-                if file_path:  # Only show successful saves
-                    text_widget.insert(tk.END, f"{check_type}: {file_path}\n")
-        else:
-            text_widget.insert(tk.END, "No output files were generated.\n")
-        
-        text_widget.configure(state='disabled')  # Make read-only
+    results_window = tk.Toplevel(self.root)
+    results_window.title("Topology Test Results")
+    
+    # Create text widget for results
+    text_widget = tk.Text(results_window, wrap=tk.WORD, width=60, height=20)
+    text_widget.grid(row=0, column=0, padx=10, pady=10)
+    
+    # Add scrollbar
+    scrollbar = ttk.Scrollbar(results_window, orient=tk.VERTICAL, 
+                            command=text_widget.yview)
+    scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+    text_widget['yscrollcommand'] = scrollbar.set
+    
+    # Insert results
+    text_widget.insert(tk.END, summary + "\n\nOutput files:\n")
+    if output_files:
+        for check_type, file_path in output_files.items():
+            if file_path:  # Only show successful saves
+                text_widget.insert(tk.END, f"{check_type}: {file_path}\n")
+    else:
+        text_widget.insert(tk.END, "No output files were generated.\n")
+    
+    text_widget.configure(state='disabled')  # Make read-only
 
 def main():
     root = tk.Tk()

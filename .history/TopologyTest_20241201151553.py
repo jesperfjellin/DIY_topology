@@ -404,38 +404,38 @@ class TopologyTest:
             features = []
             
             if check_type == 'intersections':
-                for geom1, geom2, inter_geom, attr1, attr2 in issues:
-                    # Remove geometry from attributes if present
-                    attr1 = {k: v for k, v in attr1.items() if k != 'geometry'}
-                    attr2 = {k: v for k, v in attr2.items() if k != 'geometry'}
-                    
-                    properties = {
-                        'feature1_attributes': self._convert_to_json_serializable(attr1),
-                        'feature2_attributes': self._convert_to_json_serializable(attr2),
-                        'feature1_geometry': geom1,
-                        'feature2_geometry': geom2
-                    }
-                    features.append({
-                        'type': 'Feature',
-                        'geometry': inter_geom,
-                        'properties': properties
-                    })
-            elif check_type in ['overlaps', 'containment']:
-                for geom1, geom2, attr1, attr2 in issues:
-                    # Remove geometry from attributes if present
-                    attr1 = {k: v for k, v in attr1.items() if k != 'geometry'}
-                    attr2 = {k: v for k, v in attr2.items() if k != 'geometry'}
-                    
-                    properties = {
-                        'feature1_attributes': self._convert_to_json_serializable(attr1),
-                        'feature2_attributes': self._convert_to_json_serializable(attr2),
-                        'feature2_geometry': geom2
-                    }
-                    features.append({
-                        'type': 'Feature',
-                        'geometry': geom1,
-                        'properties': properties
-                    })
+            for geom1, geom2, inter_geom, attr1, attr2 in issues:
+                # Remove geometry from attributes if present
+                attr1 = {k: v for k, v in attr1.items() if k != 'geometry'}
+                attr2 = {k: v for k, v in attr2.items() if k != 'geometry'}
+                
+                properties = {
+                    'feature1_attributes': self._convert_to_json_serializable(attr1),
+                    'feature2_attributes': self._convert_to_json_serializable(attr2),
+                    'feature1_geometry': geom1,
+                    'feature2_geometry': geom2
+                }
+                features.append({
+                    'type': 'Feature',
+                    'geometry': inter_geom,
+                    'properties': properties
+                })
+        elif check_type in ['overlaps', 'containment']:
+            for geom1, geom2, attr1, attr2 in issues:
+                # Remove geometry from attributes if present
+                attr1 = {k: v for k, v in attr1.items() if k != 'geometry'}
+                attr2 = {k: v for k, v in attr2.items() if k != 'geometry'}
+                
+                properties = {
+                    'feature1_attributes': self._convert_to_json_serializable(attr1),
+                    'feature2_attributes': self._convert_to_json_serializable(attr2),
+                    'feature2_geometry': geom2
+                }
+                features.append({
+                    'type': 'Feature',
+                    'geometry': geom1,
+                    'properties': properties
+                })
 
             # Convert the entire feature collection to ensure everything is JSON serializable
             feature_collection = {

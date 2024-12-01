@@ -4,6 +4,7 @@ import json
 from TopologyTest import TopologyTest
 from pathlib import Path
 import os
+import shapely
 
 class TopologyTestGUI:
     def __init__(self, root):
@@ -203,12 +204,8 @@ class TopologyTestGUI:
         
         # Insert results
         text_widget.insert(tk.END, summary + "\n\nOutput files:\n")
-        if output_files:
-            for check_type, file_path in output_files.items():
-                if file_path:  # Only show successful saves
-                    text_widget.insert(tk.END, f"{check_type}: {file_path}\n")
-        else:
-            text_widget.insert(tk.END, "No output files were generated.\n")
+        for check_type, file_path in output_files.items():
+            text_widget.insert(tk.END, f"{check_type}: {file_path}\n")
         
         text_widget.configure(state='disabled')  # Make read-only
 

@@ -2,7 +2,6 @@ import geojson
 import os
 import json
 from shapely.geometry import mapping, MultiPolygon, MultiLineString, Polygon, Point
-from shapely.geometry.base import BaseGeometry
 from shapely.ops import unary_union
 from itertools import combinations
 import geopandas as gpd
@@ -388,6 +387,7 @@ class TopologyTest:
     
     def _save_issues_to_geojson(self, check_type, issues):
         try:
+            # Debug print
             print(f"\nSaving {check_type} issues:")
             print(f"Number of issues: {len(issues)}")
             
@@ -405,44 +405,38 @@ class TopologyTest:
             
             if check_type == 'intersections':
                 for geom1, geom2, inter_geom, attr1, attr2 in issues:
-                    # Remove geometry from attributes if present
-                    attr1 = {k: v for k, v in attr1.items() if k != 'geometry'}
-                    attr2 = {k: v for k, v in attr2.items() if k != 'geometry'}
-                    
+                    # Debug print
+                    print(f"Intersection geometry type: {type(inter_geom)}")
                     properties = {
-                        'feature1_attributes': self._convert_to_json_serializable(attr1),
-                        'feature2_attributes': self._convert_to_json_serializable(attr2),
-                        'feature1_geometry': geom1,
-                        'feature2_geometry': geom2
+                        'feature1_attributes': attr1,
+                        'feature2_attributes': attr2
                     }
                     features.append({
                         'type': 'Feature',
-                        'geometry': inter_geom,
+                        'geometry': inter_geom,  # Should already be GeoJSON
                         'properties': properties
                     })
             elif check_type in ['overlaps', 'containment']:
                 for geom1, geom2, attr1, attr2 in issues:
-                    # Remove geometry from attributes if present
-                    attr1 = {k: v for k, v in attr1.items() if k != 'geometry'}
-                    attr2 = {k: v for k, v in attr2.items() if k != 'geometry'}
-                    
+                    # Debug print
+                    print(f"Overlap geometry type: {type(geom1)}")
                     properties = {
-                        'feature1_attributes': self._convert_to_json_serializable(attr1),
-                        'feature2_attributes': self._convert_to_json_serializable(attr2),
-                        'feature2_geometry': geom2
+                        'feature1_attributes': attr1,
+                        'feature2_attributes': attr2
                     }
                     features.append({
                         'type': 'Feature',
-                        'geometry': geom1,
+                        'geometry': geom1,  # Should already be GeoJSON
                         'properties': properties
                     })
 
-            # Convert the entire feature collection to ensure everything is JSON serializable
+            # Create and save the GeoJSON
             feature_collection = {
                 'type': 'FeatureCollection',
-                'features': self._convert_to_json_serializable(features)
+                'features': features
             }
 
+            # Debug print
             print(f"Saving to: {output_file}")
             
             with open(output_file, 'w') as f:
