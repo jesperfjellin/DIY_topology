@@ -1,43 +1,79 @@
 import geojson
 import os
 import json
-from shapely.geometry import shape, mapping, GeometryCollection, MultiLineString, MultiPolygon
+from shapely.geometry import GeometryCollection, MultiLineString, MultiPolygon, Point, LineString, mapping
+from shapely.ops import unary_union
 from itertools import combinations
 import geopandas as gpd
 
 class TopologyTest:
-    def __init__(self, geojson_file, dataset_type, rules_file, config_file=None):
+    def __init__(self, geojson_file, dataset_type, config_file):
         """
-        Initialize the TopologyTest with a GeoJSON file, dataset type, rules file, and optional config file.
-        :param geojson_file: Path to the GeoJSON file.
+        Initialize the TopologyTest with a GeoJSON file and config file.
+        :param geojson_file: Path to the GeoJSON file to validate.
         :param dataset_type: The type of dataset, e.g., 'roads' or 'buildings'.
-        :param rules_file: Path to the JSON file containing legal intersection rules.
-        :param config_file: Path to the JSON file containing configuration parameters.
+        :param config_file: Path to the config file containing all settings and rules.
         """
         self.geojson_file = geojson_file
         self.dataset_type = dataset_type
-        self.rules = self._load_rules(rules_file)
         self.config = self._load_config(config_file)
+        self.rules = self._load_rules(config_file)
         self.geometries = self._load_geometries(geojson_file)
-        self.invalid_intersections = None  # Cache for invalid intersections
+        self.invalid_intersections = None
 
     def _load_config(self, config_file):
         """
         Load configuration parameters from a JSON file.
         :param config_file: Path to the JSON file.
-        :return: A dictionary containing configuration parameters.
+        :return: Dictionary containing configuration parameters.
         """
         if config_file and os.path.exists(config_file):
             with open(config_file) as f:
-                config = json.load(f)
+                full_config = json.load(f)
+                
+            # Merge global settings with dataset-specific rules
+            config = full_config.get('global_settings', {})
+            dataset_rules = full_config.get('dataset_rules', {}).get(self.dataset_type, {})
+            
+            # Combine settings
+            config.update(dataset_rules)
+            
             return config
         else:
-            # default configurations
+            # Default configurations
             return {
                 "id_attribute": "id",
                 "output_folder_name": "TopologyTest_Output",
-                "min_intersection_area": 0  # Set to 0 for roads (intersections have area 0)
+                "enabled_checks": {
+                    "intersections": True,
+                    "self_intersections": True,
+                    "gaps": True,
+                    "dangles": True,
+                    "overlaps": True,
+                    "containment": True
+                },
+                "tolerances": {
+                    "gap": 0.0,
+                    "overlap": 0.0
+                },
+                "allow_intersection_if": [],
+                "allow_overlap_if": []
             }
+    def _validate_config_structure(self, config):
+        """Validate that the config file has the required structure."""
+        required_sections = ['global_settings', 'dataset_rules']
+        required_global = ['enabled_checks', 'tolerances']
+        
+        for section in required_sections:
+            if section not in config:
+                raise ValueError(f"Missing required section '{section}' in config file")
+                
+        for setting in required_global:
+            if setting not in config['global_settings']:
+                raise ValueError(f"Missing required global setting '{setting}'")
+                
+        if self.dataset_type not in config['dataset_rules']:
+            raise ValueError(f"Dataset type '{self.dataset_type}' not found in config")
 
     def _load_geometries(self, geojson_file):
         """
@@ -68,22 +104,23 @@ class TopologyTest:
 
         return geometries
 
-    def _load_rules(self, rules_file):
+    def _load_rules(self, config_file):
         """
-        Load legal intersection rules from a JSON file.
-        :param rules_file: Path to the JSON file.
-        :return: A dictionary containing rules.
+        Load rules from the config file.
+        :param config_file: Path to the config file.
+        :return: A dictionary containing rules for the dataset type.
         """
-        if not os.path.exists(rules_file):
-            raise FileNotFoundError(f"Rules file not found: {rules_file}")
+        if not os.path.exists(config_file):
+            raise FileNotFoundError(f"Config file not found: {config_file}")
 
-        with open(rules_file) as f:
-            rules = json.load(f)
+        with open(config_file) as f:
+            config = json.load(f)
 
-        if self.dataset_type not in rules:
-            raise ValueError(f"Dataset type '{self.dataset_type}' not found in rules.")
+        dataset_rules = config.get('dataset_rules', {}).get(self.dataset_type)
+        if not dataset_rules:
+            raise ValueError(f"Dataset type '{self.dataset_type}' not found in config.")
 
-        return rules[self.dataset_type]
+        return dataset_rules
 
     def check_intersections(self):
         """
@@ -146,55 +183,16 @@ class TopologyTest:
         # If no conditions are met, the intersection is invalid
         return False
 
-    def save_invalid_intersections(self, invalid_intersections):
-        """
-        Save the invalid intersections to a new GeoJSON file in a nested output folder.
-        The output filename includes the dataset type to prevent overwriting.
-        Each feature includes the two intersecting geometries.
-        :param invalid_intersections: List of invalid intersection tuples.
-        :return: Path to the output GeoJSON file.
-        """
-        # Create the output folder
-        base_path = os.path.dirname(self.geojson_file)
-        output_folder = os.path.join(base_path, self.config.get("output_folder_name", "TopologyTest_Output"))
-        os.makedirs(output_folder, exist_ok=True)
-
-        # Prepare GeoJSON features for the invalid intersections
-        features = []
-        for geom1, geom2, inter_geom, attr1, attr2 in invalid_intersections:
-            # For roads (LineStrings), create a MultiLineString of the two lines
-            if geom1.geom_type == 'LineString' and geom2.geom_type == 'LineString':
-                combined_geom = MultiLineString([geom1, geom2])
-            # For polygons (buildings), create a MultiPolygon of the two polygons
-            elif geom1.geom_type == 'Polygon' and geom2.geom_type == 'Polygon':
-                combined_geom = MultiPolygon([geom1, geom2])
-            else:
-                # If geometries are of mixed types, create a GeometryCollection
-                combined_geom = GeometryCollection([geom1, geom2])
-
-            # Add the combined geometry with references to the original features
-            features.append({
-                "type": "Feature",
-                "geometry": mapping(combined_geom),
-                "properties": {
-                    "status": "invalid_intersection",
-                    "feature1_id": attr1.get(self.config.get("id_attribute", "id"), 'N/A'),
-                    "feature2_id": attr2.get(self.config.get("id_attribute", "id"), 'N/A')
-                }
-            })
-
-        # Create the output GeoJSON file with dataset_type in the filename
-        output_geojson = {
-            "type": "FeatureCollection",
-            "features": features
-        }
-        output_filename = f"invalid_intersections_{self.dataset_type}.geojson"
-        output_file = os.path.join(output_folder, output_filename)
-        with open(output_file, 'w') as f:
-            geojson.dump(output_geojson, f, indent=2)
-
-
-        return output_file
+    def save_topology_results(self, results):
+        """Save all topology check results to GeoJSON files."""
+        output_files = {}
+        
+        for check_type, issues in results.items():
+            if issues and len(issues) > 0:
+                output_file = self._save_issues_to_geojson(check_type, issues)
+                output_files[check_type] = output_file
+        
+        return output_files
 
     def report_invalid_intersections(self):
         """
@@ -214,31 +212,97 @@ class TopologyTest:
         report += f"Number of invalid intersections: {len(invalid_intersections)}\n"
         report += f"Invalid intersections have been saved to: {output_file}\n"
         return report
+    
+    def check_self_intersections(self):
+        '''Check if any individual geometry intersects with itself.'''
+        self_intersections = []
+        for geom, attrs in self.geometries:
+            if not geom.is_simple:
+                self_intersections.append((geom, attrs))
+        return self_intersections
+
+    def check_gaps(self, tolerance=0.0):
+        """
+        Check for gaps between adjacent polygons.
+        :param tolerance: Maximum allowed gap width
+        """
+        if not self.geometries:
+            return []
+        
+        # Create a union of all polygons
+        all_polys = unary_union([geom for geom, _ in self.geometries])
+        # Create a slightly larger boundary
+        buffered = all_polys.buffer(tolerance)
+        # Find gaps
+        gaps = buffered.difference(all_polys)
+        return gaps if not gaps.is_empty else []
+    
+    def check_dangles(self):
+        """Check for dangling ends in line networks."""
+        dangles = []
+        # Create network from all lines
+        network = unary_union([geom for geom, _ in self.geometries])
+        
+        for geom, attrs in self.geometries:
+            if geom.geom_type == 'LineString':
+                start_point = Point(geom.coords[0])
+                end_point = Point(geom.coords[-1])
+                # Check if endpoints connect to other lines
+                if not network.difference(geom).intersects(start_point) or \
+                not network.difference(geom).intersects(end_point):
+                    dangles.append((geom, attrs))
+        return dangles
+    
+    def check_overlaps(self, tolerance=0.0):
+        """
+        Check for overlapping geometries beyond simple intersection points.
+        :param tolerance: Minimum overlap area to consider
+        """
+        overlaps = []
+        gdf = gpd.GeoDataFrame(self.geometries, columns=['geometry', 'attributes'])
+        
+        for idx1, row1 in gdf.iterrows():
+            for idx2, row2 in gdf.iloc[idx1+1:].iterrows():
+                if row1['geometry'].overlaps(row2['geometry']):
+                    overlap_area = row1['geometry'].intersection(row2['geometry']).area
+                    if overlap_area > tolerance:
+                        overlaps.append((row1['geometry'], row2['geometry'], 
+                                    row1['attributes'], row2['attributes']))
+        return overlaps
+    
+    def check_containment(self):
+        """Check for geometries completely contained within others."""
+        containment_issues = []
+        gdf = gpd.GeoDataFrame(self.geometries, columns=['geometry', 'attributes'])
+        
+        for idx1, row1 in gdf.iterrows():
+            for idx2, row2 in gdf.iloc[idx1+1:].iterrows():
+                if row1['geometry'].contains(row2['geometry']):
+                    containment_issues.append((row1['geometry'], row2['geometry'],
+                                            row1['attributes'], row2['attributes']))
+        return containment_issues
+    
+    def validate_topology(self):
+        """Run all enabled topology checks and return comprehensive results."""
+        results = {
+            'intersections': self.check_intersections() if self.config.get('check_intersections', True) else None,
+            'self_intersections': self.check_self_intersections() if self.config.get('check_self_intersections', True) else None,
+            'gaps': self.check_gaps() if self.config.get('check_gaps', True) else None,
+            'dangles': self.check_dangles() if self.config.get('check_dangles', True) else None,
+            'overlaps': self.check_overlaps() if self.config.get('check_overlaps', True) else None,
+            'containment': self.check_containment() if self.config.get('check_containment', True) else None
+        }
+        return results
 
     def report_summary(self):
-        """
-        Generate a summary report of intersection checks.
-        :return: A summary report string.
-        """
-        invalid_intersections = self.check_intersections()
-
-        total_geometries = len(self.geometries)
-        # Collect unique geometry IDs that have at least one invalid intersection
-        intersected_ids = set()
-        for *_, attr1, attr2 in invalid_intersections:
-            id1 = attr1.get(self.config.get("id_attribute", "id"), 'N/A')
-            id2 = attr2.get(self.config.get("id_attribute", "id"), 'N/A')
-            intersected_ids.add(id1)
-            intersected_ids.add(id2)
-
-        num_intersected_geometries = len(intersected_ids)
-
-        # Calculate average invalid intersections per intersected geometry
-        average_intersections = len(invalid_intersections) / num_intersected_geometries if num_intersected_geometries else 0
-
-        report = f"Intersection Summary for dataset: {self.dataset_type}\n"
-        report += f"Total geometries: {total_geometries}\n"
-        report += f"Geometries intersected: {num_intersected_geometries}\n"
-        report += f"Average intersections per geometry: {average_intersections:.2f}\n"
-        report += f"Percentage intersected: {(num_intersected_geometries / total_geometries) * 100:.2f}%"
+        """Generate a comprehensive summary report of all topology checks."""
+        results = self.validate_topology()
+        
+        report = f"Topology Summary for dataset: {self.dataset_type}\n"
+        report += f"Total geometries: {len(self.geometries)}\n\n"
+        
+        for check_type, issues in results.items():
+            if issues is not None:
+                report += f"{check_type.replace('_', ' ').title()}: {len(issues)} issues found\n"
+        
         return report

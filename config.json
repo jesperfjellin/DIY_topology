@@ -1,5 +1,43 @@
 {
-    "id_attribute": "id",
-    "output_folder_name": "TopologyTest_Output",
-    "min_intersection_area": 0
+    "global_settings": {
+        "id_attribute": "id",
+        "output_folder_name": "TopologyTest_Output",
+        "tolerances": {
+            "gap": 0.001,
+            "overlap": 0.001
+        },
+        "enabled_checks": {
+            "intersections": true,
+            "self_intersections": true,
+            "gaps": true,
+            "dangles": true,
+            "overlaps": true,
+            "containment": true
+        }
+    },
+    "dataset_rules": {
+        "roads": {
+            "allow_intersection_if": [
+                {
+                    "attribute": "terrain",
+                    "values": ["bridge", "tunnel", "air"]
+                }
+            ],
+            "allow_overlap_if": [
+                {
+                    "attribute": "type",
+                    "values": ["service_road", "emergency_lane"]
+                }
+            ],
+            "check_dangles": true,
+            "check_self_intersections": true
+        },
+        "buildings": {
+            "allow_intersection_if": [],
+            "allow_overlap_if": [],
+            "check_gaps": true,
+            "gap_tolerance": 0.5,
+            "check_containment": true
+        }
+    }
 }
