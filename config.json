@@ -1,0 +1,5 @@
+{
+    "id_attribute": "id",
+    "output_folder_name": "TopologyTest_Output",
+    "min_intersection_area": 0
+}
