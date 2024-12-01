@@ -45,8 +45,6 @@ class TopologyTestGUI:
             
             with open(config_path, 'r') as f:
                 config = json.load(f)
-                print("Loaded config file:")
-                print("Dataset rules:", config.get('dataset_rules', {}).keys())
                 return config
         except FileNotFoundError:
             print("Config file not found!")
@@ -85,7 +83,6 @@ class TopologyTestGUI:
         
         # Dataset type dropdown
         type_var = tk.StringVar()
-        print("Available dataset types:", self.dataset_types)  # Debug print
         type_dropdown = ttk.Combobox(row_frame, textvariable=type_var, 
                                 values=self.dataset_types, width=15)
         if self.dataset_types:  # Set default value if available
